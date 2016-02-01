@@ -1,7 +1,8 @@
-.libPaths('C:/R-lib')
+#.libPaths('C:/R-lib')
 library(shiny)
 library(xtable)
 library(scales)
+library(choroplethrZip)
 options(stringsAsFactors = F)
 
 
@@ -16,21 +17,27 @@ leinFlag<-subset(data, LIENFLAG != '')
 unpaid<-subset(data, FULLPAID != 'Y')
 
 
-ui <- fluidPage(
+ui <- fluidPage(theme="readable.css",
   
   #Application Title
   headerPanel("Vacant And Abandoned Properties"),
   #Sidebar
   sidebarPanel(
-    checkboxGroupInput('zip', 'Which Zip Codes?', sort(LouisvilleZips)),
-    checkboxGroupInput('year', 'For Which Years?', sort(unique(data$TAXYEAR)))
+    checkboxGroupInput('zip', 'Which Zip Codes?', sort(LouisvilleZips),selected = sort(LouisvilleZips), inline=T),
+    checkboxGroupInput('year', 'For Which Years?', sort(unique(data$TAXYEAR)), selected = max(sort(unique(data$TAXYEAR))))
   ),
   mainPanel(
-    textOutput('totalDue'),
-    tableOutput('dueToWho')
+    div(class="col-sm-6",
+        div(style="text-align: center; font-size: 250%; font-weight: bold;",
+          textOutput('totalDue')
+        ),
+        tableOutput('dueToWho')
+    ),
+    div(class="col-sm-6",
+      plotOutput('zipChoro')
+    )
   )
 )
-
 server <- function(input, output){
   output$totalDue<-renderText({
     outData<-subset(data, ZIP %in% input$zip & TAXYEAR %in% input$year)
@@ -49,7 +56,21 @@ server <- function(input, output){
       length(which(outData$PDBYSOLDTO == i))
     })
     newData$PaidBySoldTo[which(newData$PaidBySoldTo=='')]<-'Metro Louisville'
-    return(newData)
+    return(newData[order(-newData$Total),])
+  })
+  
+  output$zipChoro<-renderPlot({
+    newData<-subset(data, ZIP %in% input$zip & TAXYEAR %in% input$year, select=c('ZIP', 'BILLTOT'))
+    outData<-data.frame(input$zip)
+    colnames(outData)<-'region'
+    outData$value<-sapply(outData$region,function(i){
+        sum(newData$BILLTOT[which(newData$ZIP == i)])
+    })
+    zip_choropleth(outData,
+                   county_zoom = '21111',
+                   title = 'Owed Per Zip',
+                   legend = '$ per Zip',
+                   num_colors = 1)
   })
 }
 
